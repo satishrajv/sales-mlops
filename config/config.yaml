@@ -1,8 +1,10 @@
+
 aws:
   region: us-east-2
   s3_bucket: sales-prediction-mlops
   s3_data_path: data/raw/sales_data.csv
   s3_artifacts_path: data/artifacts/
+
 
 mlflow:
   experiment_name: sales-prediction
