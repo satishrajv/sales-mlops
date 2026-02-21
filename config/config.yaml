@@ -8,7 +8,7 @@ aws:
 
 mlflow:
   experiment_name: sales-prediction
-  tracking_uri: http://localhost:5000  # will update with EC2 IP in Step 3
+  tracking_uri: http://18.221.105.217
 
 model:
   name: sales-prediction-model

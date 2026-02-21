@@ -20,7 +20,8 @@ def evaluate_model():
 
     # Load config
     config = load_config()
-    tracking_uri = config['mlflow']['tracking_uri']
+    # Use environment variable if set, otherwise use config.yaml
+    tracking_uri = os.environ.get('MLFLOW_TRACKING_URI', config['mlflow']['tracking_uri'])
     experiment_name = config['mlflow']['experiment_name']
 
     # Set MLflow tracking URI
