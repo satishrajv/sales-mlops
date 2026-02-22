@@ -99,9 +99,8 @@ def deploy_to_sagemaker(config, model_s3_uri):
     instance_type = config["sagemaker"]["instance_type"]
     role_arn = "arn:aws:iam::936408601161:role/AmazonSageMakerFullAccess"
 
-    # Correct SKLearn image URI for us-east-2
-    # Reference: https://github.com/aws/sagemaker-python-sdk/blob/master/src/sagemaker/image_uri_config/sklearn.json
-    sklearn_image = "257758044811.dkr.ecr.us-east-2.amazonaws.com/sagemaker-scikit-learn:1.2-1-cpu-py3"
+    # Correct SKLearn image URI for us-east-2 (verified tag: 1.2-1-1.0.174.0)
+    sklearn_image = "257758044811.dkr.ecr.us-east-2.amazonaws.com/sagemaker-scikit-learn:1.2-1-1.0.174.0"
 
     print(f"Using image: {sklearn_image}")
     print(f"Creating SageMaker SKLearn model...")
@@ -116,7 +115,7 @@ def deploy_to_sagemaker(config, model_s3_uri):
         role=role_arn,
         entry_point="inference.py",
         source_dir="code",
-        framework_version="1.2-1",
+        framework_version="1.2-1-1.0.174.0",
         py_version="py3",
         image_uri=sklearn_image,
         sagemaker_session=sagemaker_session,
