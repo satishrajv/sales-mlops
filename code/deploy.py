@@ -2,10 +2,11 @@ import os
 import boto3
 import tarfile
 import yaml
-import json
 import shutil
 import mlflow
 from mlflow.tracking import MlflowClient
+from sagemaker.sklearn.model import SKLearnModel
+import sagemaker
 
 
 def load_config():
@@ -92,77 +93,42 @@ def upload_model_to_s3(config, tar_path):
 
 
 def deploy_to_sagemaker(config, model_s3_uri):
-    """Create or update SageMaker endpoint."""
-    sm_client = boto3.client("sagemaker", region_name=config["aws"]["region"])
-
+    """Create or update SageMaker endpoint using SageMaker SDK."""
+    region = config["aws"]["region"]
     endpoint_name = config["sagemaker"]["endpoint_name"]
     instance_type = config["sagemaker"]["instance_type"]
     role_arn = "arn:aws:iam::936408601161:role/AmazonSageMakerFullAccess"
-    region = config["aws"]["region"]
 
-    # SKLearn container image URI
-    sklearn_image = f"341280168497.dkr.ecr.{region}.amazonaws.com/sagemaker-scikit-learn:1.2-1-cpu-py3"
-
-    model_name = f"sales-prediction-model"
-    config_name = f"sales-prediction-config"
-
-    # Step 1: Create Model
-    print(f"Creating SageMaker model: {model_name}")
-    try:
-        sm_client.delete_model(ModelName=model_name)
-        print(f"Deleted existing model: {model_name}")
-    except Exception:
-        pass
-
-    sm_client.create_model(
-        ModelName=model_name,
-        PrimaryContainer={
-            "Image": sklearn_image,
-            "ModelDataUrl": model_s3_uri,
-            "Environment": {
-                "SAGEMAKER_PROGRAM": "inference.py",
-                "SAGEMAKER_SUBMIT_DIRECTORY": model_s3_uri,
-            },
-        },
-        ExecutionRoleArn=role_arn,
+    # Use SageMaker SDK - auto resolves correct image URI for the region
+    print(f"Creating SageMaker SKLearn model...")
+    sklearn_model = SKLearnModel(
+        model_data=model_s3_uri,
+        role=role_arn,
+        entry_point="inference.py",
+        framework_version="1.2-1",
+        py_version="py3",
+        sagemaker_session=sagemaker.Session(
+            boto_session=boto3.Session(region_name=region)
+        ),
     )
-    print(f"SageMaker model created: {model_name}")
 
-    # Step 2: Create Endpoint Config
-    print(f"Creating endpoint config: {config_name}")
-    try:
-        sm_client.delete_endpoint_config(EndpointConfigName=config_name)
-        print(f"Deleted existing endpoint config: {config_name}")
-    except Exception:
-        pass
-
-    sm_client.create_endpoint_config(
-        EndpointConfigName=config_name,
-        ProductionVariants=[
-            {
-                "VariantName": "AllTraffic",
-                "ModelName": model_name,
-                "InitialInstanceCount": 1,
-                "InstanceType": instance_type,
-                "InitialVariantWeight": 1,
-            }
-        ],
-    )
-    print(f"Endpoint config created: {config_name}")
-
-    # Step 3: Create or Update Endpoint
+    # Check if endpoint already exists — update or create
+    sm_client = boto3.client("sagemaker", region_name=region)
     try:
         sm_client.describe_endpoint(EndpointName=endpoint_name)
-        print(f"Updating existing endpoint: {endpoint_name}")
-        sm_client.update_endpoint(
-            EndpointName=endpoint_name,
-            EndpointConfigName=config_name,
+        print(f"Endpoint exists — updating: {endpoint_name}")
+        sklearn_model.deploy(
+            initial_instance_count=1,
+            instance_type=instance_type,
+            endpoint_name=endpoint_name,
+            update_endpoint=True,
         )
     except sm_client.exceptions.ClientError:
         print(f"Creating new endpoint: {endpoint_name}")
-        sm_client.create_endpoint(
-            EndpointName=endpoint_name,
-            EndpointConfigName=config_name,
+        sklearn_model.deploy(
+            initial_instance_count=1,
+            instance_type=instance_type,
+            endpoint_name=endpoint_name,
         )
 
     print(f"Endpoint deployment started: {endpoint_name}")
