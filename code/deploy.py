@@ -121,36 +121,33 @@ def deploy_to_sagemaker(config, model_s3_uri):
         sagemaker_session=sagemaker_session,
     )
 
-    # Delete existing endpoint config if exists (SageMaker SDK creates its own)
-    config_name = f"{endpoint_name}-config"
-    try:
-        sm_client.delete_endpoint_config(EndpointConfigName=endpoint_name)
-        print(f"Deleted old endpoint config: {endpoint_name}")
-    except Exception:
-        pass
-    try:
-        sm_client.delete_endpoint_config(EndpointConfigName=config_name)
-        print(f"Deleted old endpoint config: {config_name}")
-    except Exception:
-        pass
+    # Delete ALL existing endpoint configs that match our endpoint name pattern
+    print("Cleaning up existing endpoint configs...")
+    existing_configs = sm_client.list_endpoint_configs()["EndpointConfigs"]
+    for cfg in existing_configs:
+        cfg_name = cfg["EndpointConfigName"]
+        if endpoint_name in cfg_name:
+            try:
+                sm_client.delete_endpoint_config(EndpointConfigName=cfg_name)
+                print(f"Deleted endpoint config: {cfg_name}")
+            except Exception as e:
+                print(f"Could not delete config {cfg_name}: {e}")
 
-    # Check if endpoint already exists — update or create
+    # Deploy endpoint — create or update
+    endpoint_exists = False
     try:
         sm_client.describe_endpoint(EndpointName=endpoint_name)
-        print(f"Endpoint exists — updating: {endpoint_name}")
-        sklearn_model.deploy(
-            initial_instance_count=1,
-            instance_type=instance_type,
-            endpoint_name=endpoint_name,
-            update_endpoint=True,
-        )
+        endpoint_exists = True
+        print(f"Endpoint exists — will update: {endpoint_name}")
     except Exception:
-        print(f"Creating new endpoint: {endpoint_name}")
-        sklearn_model.deploy(
-            initial_instance_count=1,
-            instance_type=instance_type,
-            endpoint_name=endpoint_name,
-        )
+        print(f"Endpoint does not exist — will create: {endpoint_name}")
+
+    sklearn_model.deploy(
+        initial_instance_count=1,
+        instance_type=instance_type,
+        endpoint_name=endpoint_name,
+        update_endpoint=endpoint_exists,
+    )
 
     print(f"Endpoint deployment started: {endpoint_name}")
     print(f"Note: Endpoint takes 5-10 minutes to become InService")
