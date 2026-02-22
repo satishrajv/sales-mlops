@@ -121,6 +121,19 @@ def deploy_to_sagemaker(config, model_s3_uri):
         sagemaker_session=sagemaker_session,
     )
 
+    # Delete existing endpoint config if exists (SageMaker SDK creates its own)
+    config_name = f"{endpoint_name}-config"
+    try:
+        sm_client.delete_endpoint_config(EndpointConfigName=endpoint_name)
+        print(f"Deleted old endpoint config: {endpoint_name}")
+    except Exception:
+        pass
+    try:
+        sm_client.delete_endpoint_config(EndpointConfigName=config_name)
+        print(f"Deleted old endpoint config: {config_name}")
+    except Exception:
+        pass
+
     # Check if endpoint already exists — update or create
     try:
         sm_client.describe_endpoint(EndpointName=endpoint_name)
@@ -131,7 +144,7 @@ def deploy_to_sagemaker(config, model_s3_uri):
             endpoint_name=endpoint_name,
             update_endpoint=True,
         )
-    except sm_client.exceptions.ClientError:
+    except Exception:
         print(f"Creating new endpoint: {endpoint_name}")
         sklearn_model.deploy(
             initial_instance_count=1,
