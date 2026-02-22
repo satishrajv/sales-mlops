@@ -29,11 +29,23 @@ def predict_fn(input_data, model_artifacts):
     model = model_artifacts["model"]
     label_encoder = model_artifacts["label_encoder"]
 
-    # Encode product_category if present
+    # Encode product_category → product_category_encoded if raw category sent
     if "product_category" in input_data.columns:
-        input_data["product_category"] = label_encoder.transform(
+        input_data["product_category_encoded"] = label_encoder.transform(
             input_data["product_category"]
         )
+        input_data = input_data.drop(columns=["product_category"])
+
+    # Ensure correct feature order matching training
+    feature_columns = [
+        "store_id",
+        "product_category_encoded",
+        "units_sold",
+        "unit_price",
+        "discount_pct",
+        "is_weekend"
+    ]
+    input_data = input_data[feature_columns]
 
     prediction = model.predict(input_data)
     return prediction
