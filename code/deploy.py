@@ -105,6 +105,7 @@ def deploy_to_sagemaker(config, model_s3_uri):
         model_data=model_s3_uri,
         role=role_arn,
         entry_point="inference.py",
+        source_dir="code",
         framework_version="1.2-1",
         py_version="py3",
         sagemaker_session=sagemaker.Session(
