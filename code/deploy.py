@@ -99,8 +99,18 @@ def deploy_to_sagemaker(config, model_s3_uri):
     instance_type = config["sagemaker"]["instance_type"]
     role_arn = "arn:aws:iam::936408601161:role/AmazonSageMakerFullAccess"
 
-    # Use SageMaker SDK - auto resolves correct image URI for the region
+    # Correct SKLearn image URI for us-east-2
+    # Reference: https://github.com/aws/sagemaker-python-sdk/blob/master/src/sagemaker/image_uri_config/sklearn.json
+    sklearn_image = "257758044811.dkr.ecr.us-east-2.amazonaws.com/sagemaker-scikit-learn:1.2-1-cpu-py3"
+
+    print(f"Using image: {sklearn_image}")
     print(f"Creating SageMaker SKLearn model...")
+
+    sm_client = boto3.client("sagemaker", region_name=region)
+    sagemaker_session = sagemaker.Session(
+        boto_session=boto3.Session(region_name=region)
+    )
+
     sklearn_model = SKLearnModel(
         model_data=model_s3_uri,
         role=role_arn,
@@ -108,13 +118,11 @@ def deploy_to_sagemaker(config, model_s3_uri):
         source_dir="code",
         framework_version="1.2-1",
         py_version="py3",
-        sagemaker_session=sagemaker.Session(
-            boto_session=boto3.Session(region_name=region)
-        ),
+        image_uri=sklearn_image,
+        sagemaker_session=sagemaker_session,
     )
 
     # Check if endpoint already exists — update or create
-    sm_client = boto3.client("sagemaker", region_name=region)
     try:
         sm_client.describe_endpoint(EndpointName=endpoint_name)
         print(f"Endpoint exists — updating: {endpoint_name}")
