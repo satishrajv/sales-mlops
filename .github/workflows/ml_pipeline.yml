@@ -67,3 +67,11 @@ jobs:
         run: |
           echo "Running Model Evaluation..."
           python code/evaluate.py
+
+      # Step 9 - Deploy to SageMaker
+      - name: Deploy to SageMaker
+        env:
+          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+        run: |
+          echo "Deploying model to SageMaker..."
+          python code/deploy.py
