@@ -8,7 +8,7 @@ aws:
 
 mlflow:
   experiment_name: sales-prediction
-  tracking_uri: http://18.221.105.217
+  tracking_uri: http://18.191.95.224
 
 model:
   name: sales-prediction-model

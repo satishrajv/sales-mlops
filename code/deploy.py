@@ -5,8 +5,6 @@ import yaml
 import shutil
 import mlflow
 from mlflow.tracking import MlflowClient
-from sagemaker.sklearn.model import SKLearnModel
-import sagemaker
 
 
 def load_config():
@@ -93,61 +91,73 @@ def upload_model_to_s3(config, tar_path):
 
 
 def deploy_to_sagemaker(config, model_s3_uri):
-    """Create or update SageMaker endpoint using SageMaker SDK."""
+    """Create or update SageMaker endpoint using boto3 directly (SageMaker SDK v2 compatible)."""
+    import datetime
     region = config["aws"]["region"]
     endpoint_name = config["sagemaker"]["endpoint_name"]
     instance_type = config["sagemaker"]["instance_type"]
     role_arn = "arn:aws:iam::936408601161:role/AmazonSageMakerFullAccess"
-
-    # Correct SKLearn image URI for us-east-2 (verified tag: 1.2-1-1.0.174.0)
     sklearn_image = "257758044811.dkr.ecr.us-east-2.amazonaws.com/sagemaker-scikit-learn:1.2-1-1.0.174.0"
 
-    print(f"Using image: {sklearn_image}")
-    print(f"Creating SageMaker SKLearn model...")
-
     sm_client = boto3.client("sagemaker", region_name=region)
-    sagemaker_session = sagemaker.Session(
-        boto_session=boto3.Session(region_name=region)
+
+    # Step 1: Create a unique model name with timestamp
+    timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+    model_name = f"{endpoint_name}-{timestamp}"
+
+    print(f"Using image: {sklearn_image}")
+    print(f"Creating SageMaker model: {model_name}")
+    sm_client.create_model(
+        ModelName=model_name,
+        PrimaryContainer={
+            "Image": sklearn_image,
+            "ModelDataUrl": model_s3_uri,
+            "Environment": {
+                "SAGEMAKER_PROGRAM": "inference.py",
+                "SAGEMAKER_SUBMIT_DIRECTORY": model_s3_uri,
+            }
+        },
+        ExecutionRoleArn=role_arn,
     )
 
-    sklearn_model = SKLearnModel(
-        model_data=model_s3_uri,
-        role=role_arn,
-        entry_point="inference.py",
-        source_dir="code",
-        framework_version="1.2-1-1.0.174.0",
-        py_version="py3",
-        image_uri=sklearn_image,
-        sagemaker_session=sagemaker_session,
+    # Step 2: Create a unique endpoint config with timestamp
+    config_name = f"{endpoint_name}-config-{timestamp}"
+    print(f"Creating endpoint config: {config_name}")
+    sm_client.create_endpoint_config(
+        EndpointConfigName=config_name,
+        ProductionVariants=[{
+            "VariantName": "AllTraffic",
+            "ModelName": model_name,
+            "InitialInstanceCount": 1,
+            "InstanceType": instance_type,
+        }]
     )
 
-    # Delete ALL existing endpoint configs that match our endpoint name pattern
-    print("Cleaning up existing endpoint configs...")
-    existing_configs = sm_client.list_endpoint_configs()["EndpointConfigs"]
-    for cfg in existing_configs:
-        cfg_name = cfg["EndpointConfigName"]
-        if endpoint_name in cfg_name:
-            try:
-                sm_client.delete_endpoint_config(EndpointConfigName=cfg_name)
-                print(f"Deleted endpoint config: {cfg_name}")
-            except Exception as e:
-                print(f"Could not delete config {cfg_name}: {e}")
-
-    # Deploy endpoint — create or update
+    # Step 3: Create or update endpoint
     endpoint_exists = False
     try:
-        sm_client.describe_endpoint(EndpointName=endpoint_name)
+        response = sm_client.describe_endpoint(EndpointName=endpoint_name)
+        status = response["EndpointStatus"]
+        print(f"Endpoint exists with status: {status}")
         endpoint_exists = True
-        print(f"Endpoint exists — will update: {endpoint_name}")
-    except Exception:
-        print(f"Endpoint does not exist — will create: {endpoint_name}")
+    except sm_client.exceptions.ClientError as e:
+        if "Could not find endpoint" in str(e) or "ValidationException" in str(e):
+            endpoint_exists = False
+        else:
+            raise e
 
-    sklearn_model.deploy(
-        initial_instance_count=1,
-        instance_type=instance_type,
-        endpoint_name=endpoint_name,
-        update_endpoint=endpoint_exists,
-    )
+    if endpoint_exists:
+        print(f"Endpoint exists — updating: {endpoint_name}")
+        sm_client.update_endpoint(
+            EndpointName=endpoint_name,
+            EndpointConfigName=config_name,
+        )
+    else:
+        print(f"Creating new endpoint: {endpoint_name}")
+        sm_client.create_endpoint(
+            EndpointName=endpoint_name,
+            EndpointConfigName=config_name,
+        )
 
     print(f"Endpoint deployment started: {endpoint_name}")
     print(f"Note: Endpoint takes 5-10 minutes to become InService")
