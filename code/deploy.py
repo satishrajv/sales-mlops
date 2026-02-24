@@ -37,17 +37,16 @@ def get_best_model_run_id(config):
     return run_id
 
 
-def download_model_artifacts(config, run_id):
+def download_model_artifacts(config, run_id=None):
     """Download model and label_encoder from S3."""
     s3_client = boto3.client("s3", region_name=config["aws"]["region"])
     bucket = config["aws"]["s3_bucket"]
-    experiment_id = "1"
 
     local_model_dir = "model_artifacts"
     os.makedirs(local_model_dir, exist_ok=True)
 
-    # Download model.pkl
-    model_s3_key = f"data/artifacts/{experiment_id}/{run_id}/artifacts/model/model.pkl"
+    # Download model.pkl (matches path used in train.py upload)
+    model_s3_key = f"data/artifacts/sales_model.pkl"
     print(f"Downloading model from s3://{bucket}/{model_s3_key}")
     s3_client.download_file(bucket, model_s3_key, f"{local_model_dir}/model.pkl")
 
